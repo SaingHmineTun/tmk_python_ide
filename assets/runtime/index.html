@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Python IDE Runtime</title></head>
+<body>
+<script>
+  let worker;
+
+  function send(message) {
+    if (window.PythonBridge) {
+      window.PythonBridge.postMessage(JSON.stringify(message));
+    }
+  }
+
+  function startWorker() {
+    const workerUrl = new URL('pyodide_worker.mjs', window.location.href);
+    worker = new Worker(workerUrl, {type: 'module'});
+    worker.onmessage = (event) => send(event.data);
+    worker.onerror = (event) => send({
+      type: 'runtimeError',
+      data: event.message || 'Python worker failed to start.'
+    });
+  }
+
+  window.tmkPython = {
+    execute(id, code) {
+      worker.postMessage({type: 'execute', id, code});
+    },
+    provideInput(input) {
+      worker.postMessage({type: 'input', input});
+    },
+    stop() {
+      worker.terminate();
+      send({type: 'stopped'});
+      startWorker();
+    }
+  };
+
+  startWorker();
+</script>
+</body>
+</html>

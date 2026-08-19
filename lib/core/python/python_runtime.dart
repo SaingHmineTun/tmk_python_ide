@@ -9,6 +9,8 @@ abstract class PythonRuntime {
     String code, {
     required void Function(String text) onStdout,
     required void Function(String text) onStderr,
+    required void Function() onOutputReset,
+    required void Function(String prompt) onInputRequested,
   });
 
   Future<void> provideInput(String input);

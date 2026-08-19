@@ -42,7 +42,7 @@ See [docs/python_runtime_decision.md](docs/python_runtime_decision.md) for the e
 ### Known limitations
 
 - Third-party Pyodide wheels are not bundled in Milestone 1. Imports such as NumPy/pandas are intentionally not promised offline yet.
-- `input()` is represented in the runtime API, but interactive stdin bridging is not completed. No input is faked.
+- `input()` opens an in-app prompt on Android, iOS, and web, and supports multiple prompts in one learner program.
 - The Pyodide filesystem is sandboxed from the device and browser filesystems. Its in-memory files are not persisted yet.
 - Stopping execution destroys the worker and any Python globals/files in that runtime session.
 - Output streaming is line/batch oriented. Python code that does not flush or print a newline may appear later.

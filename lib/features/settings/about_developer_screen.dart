@@ -24,6 +24,8 @@ class AboutDeveloperScreen extends StatelessWidget {
                       'Built through local creativity, education and collaboration.',
                 ),
                 const SizedBox(height: 14),
+                const _DeveloperCard(),
+                const SizedBox(height: 12),
                 const _BrandGrid(),
                 const SizedBox(height: 28),
                 const _SectionHeading(
@@ -43,6 +45,56 @@ class AboutDeveloperScreen extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _DeveloperCard extends StatelessWidget {
+  const _DeveloperCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 25,
+              backgroundColor: colors.primaryContainer,
+              foregroundColor: colors.onPrimaryContainer,
+              child: const Icon(Icons.code_rounded),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'DEVELOPED BY',
+                    style: TextStyle(
+                      color: colors.primary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Sai Mao',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const Text('ၸၢႆးမၢဝ်း'),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ProductHero extends StatelessWidget {
@@ -79,7 +131,7 @@ class _ProductHero extends StatelessWidget {
               borderRadius: BorderRadius.circular(22),
             ),
             child: Image.asset(
-              'assets/images/python-snake-mascot.png',
+              'assets/images/python-snake-mascot-blue-gold.png',
               fit: BoxFit.cover,
             ),
           ),

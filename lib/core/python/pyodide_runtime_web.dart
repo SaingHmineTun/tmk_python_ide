@@ -12,6 +12,8 @@ class PyodideRuntime implements PythonRuntime {
   Completer<PythonExecutionResult>? _execution;
   void Function(String)? _onStdout;
   void Function(String)? _onStderr;
+  void Function()? _onOutputReset;
+  void Function(String)? _onInputRequested;
   DateTime? _startedAt;
   web.Worker? _worker;
   bool _ready = false;
@@ -60,12 +62,16 @@ class PyodideRuntime implements PythonRuntime {
     String code, {
     required void Function(String text) onStdout,
     required void Function(String text) onStderr,
+    required void Function() onOutputReset,
+    required void Function(String prompt) onInputRequested,
   }) async {
     await initialize();
     if (_running) throw StateError('Python is already running.');
     _running = true;
     _onStdout = onStdout;
     _onStderr = onStderr;
+    _onOutputReset = onOutputReset;
+    _onInputRequested = onInputRequested;
     _startedAt = DateTime.now();
     _execution = Completer<PythonExecutionResult>();
     _worker!.postMessage(
@@ -106,6 +112,10 @@ class PyodideRuntime implements PythonRuntime {
         _onStdout?.call(message['data'] as String? ?? '');
       case 'stderr':
         _onStderr?.call(message['data'] as String? ?? '');
+      case 'resetOutput':
+        _onOutputReset?.call();
+      case 'inputRequest':
+        _onInputRequested?.call(message['prompt'] as String? ?? '');
       case 'completed':
         _finish(
           PythonExecutionResult(
@@ -142,6 +152,8 @@ class PyodideRuntime implements PythonRuntime {
     if (!(_execution?.isCompleted ?? true)) _execution!.complete(result);
     _onStdout = null;
     _onStderr = null;
+    _onOutputReset = null;
+    _onInputRequested = null;
   }
 
   @override

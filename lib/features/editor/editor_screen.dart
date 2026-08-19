@@ -21,6 +21,7 @@ class EditorScreen extends ConsumerStatefulWidget {
 
 class _EditorScreenState extends ConsumerState<EditorScreen> {
   PythonEditingController? _controller;
+  final FocusNode _editorFocusNode = FocusNode(debugLabel: 'Python editor');
   Object? _loadedProgramIdentity;
   double _consoleHeight = 150;
   bool _consoleCollapsed = false;
@@ -28,6 +29,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
   @override
   void dispose() {
     _controller?.dispose();
+    _editorFocusNode.dispose();
     super.dispose();
   }
 
@@ -68,7 +70,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
           child: Row(
             children: [
               Image.asset(
-                'assets/images/python-snake-mascot.png',
+                'assets/images/python-snake-mascot-blue-gold.png',
                 width: 32,
                 height: 32,
                 fit: BoxFit.cover,
@@ -116,7 +118,10 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                   : () {
                       session.updateCode(controller.text);
                       setState(() => _consoleCollapsed = false);
-                      runtime.run(controller.text);
+                      runtime.run(
+                        controller.text,
+                        onInput: _requestPythonInput,
+                      );
                     },
               icon: const Icon(Icons.play_arrow, size: 18),
               label: const Text('Run'),
@@ -132,6 +137,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
             Expanded(
               child: CodeEditor(
                 controller: controller,
+                focusNode: _editorFocusNode,
                 onChanged: (value) => session.updateCode(controller.text),
                 wordWrap: settings.wordWrap,
                 autocompleteSymbols: settings.autoClosingBrackets,
@@ -189,7 +195,10 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                 );
               }),
             ),
-            CodingToolbar(controller: controller),
+            CodingToolbar(
+              controller: controller,
+              editorFocusNode: _editorFocusNode,
+            ),
           ],
         ),
       ),
@@ -209,6 +218,15 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     } catch (error) {
       if (mounted) _showError('Could not rename program: $error');
     }
+  }
+
+  Future<String?> _requestPythonInput(String prompt) async {
+    if (!mounted) return null;
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => _PythonInputDialog(prompt: prompt),
+    );
   }
 
   Future<void> _newProgram(
@@ -361,9 +379,82 @@ class _StatusStripState extends State<_StatusStrip> {
   );
 }
 
+class _PythonInputDialog extends StatefulWidget {
+  const _PythonInputDialog({required this.prompt});
+
+  final String prompt;
+
+  @override
+  State<_PythonInputDialog> createState() => _PythonInputDialogState();
+}
+
+class _PythonInputDialogState extends State<_PythonInputDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit([String? value]) {
+    Navigator.pop(context, value ?? _controller.text);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    icon: Icon(
+      Icons.keyboard_alt_outlined,
+      color: Theme.of(context).colorScheme.primary,
+    ),
+    title: const Text('Python input'),
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.prompt.isEmpty
+                ? 'Enter a value for input().'
+                : widget.prompt,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: 'Value',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: _submit,
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Stop'),
+      ),
+      FilledButton.icon(
+        onPressed: _submit,
+        icon: const Icon(Icons.send, size: 18),
+        label: const Text('Send'),
+      ),
+    ],
+  );
+}
+
 class CodingToolbar extends StatelessWidget {
-  const CodingToolbar({super.key, required this.controller});
+  const CodingToolbar({
+    super.key,
+    required this.controller,
+    required this.editorFocusNode,
+  });
   final CodeLineEditingController controller;
+  final FocusNode editorFocusNode;
 
   static const symbols = [
     '(',
@@ -390,21 +481,33 @@ class CodingToolbar extends StatelessWidget {
   ];
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: Theme.of(context).colorScheme.surfaceContainerHigh,
-    child: SizedBox(
-      height: 46,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-        children: [
-          _button(context, 'Tab', controller.applyIndent, wide: true),
-          _button(context, '⇤', controller.applyOutdent),
-          _button(context, '↶', controller.undo),
-          _button(context, '↷', controller.redo),
-          for (final symbol in symbols)
-            _button(context, symbol, () => _insert(symbol)),
-        ],
+  Widget build(BuildContext context) => CodeEditorTapRegion(
+    child: Material(
+      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+      child: SizedBox(
+        height: 46,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+          children: [
+            _button(
+              context,
+              '←',
+              () => controller.moveCursor(AxisDirection.left),
+            ),
+            _button(
+              context,
+              '→',
+              () => controller.moveCursor(AxisDirection.right),
+            ),
+            _button(context, 'Tab', controller.applyIndent, wide: true),
+            _button(context, '⇤', controller.applyOutdent),
+            _button(context, '↶', controller.undo),
+            _button(context, '↷', controller.redo),
+            for (final symbol in symbols)
+              _button(context, symbol, () => _insert(symbol)),
+          ],
+        ),
       ),
     ),
   );
@@ -423,7 +526,7 @@ class CodingToolbar extends StatelessWidget {
           padding: EdgeInsets.zero,
           foregroundColor: Theme.of(context).colorScheme.onSurface,
         ),
-        onPressed: action,
+        onPressed: () => _perform(action),
         child: Text(
           text,
           style: const TextStyle(
@@ -434,6 +537,12 @@ class CodingToolbar extends StatelessWidget {
       ),
     ),
   );
+
+  void _perform(VoidCallback action) {
+    action();
+    editorFocusNode.requestFocus();
+    SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+  }
 
   void _insert(String symbol) {
     const pairs = {'(': ')', '[': ']', '{': '}', '"': '"', "'": "'"};

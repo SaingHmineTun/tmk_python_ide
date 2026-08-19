@@ -182,6 +182,7 @@ class RuntimeController extends ChangeNotifier {
   PythonRuntimeStatus status = PythonRuntimeStatus.starting;
   final List<ConsoleMessage> messages = [];
   String? runtimeError;
+  bool _requestingInput = false;
 
   Future<void> initialize() async {
     status = PythonRuntimeStatus.starting;
@@ -197,17 +198,32 @@ class RuntimeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> run(String code) async {
+  Future<void> run(
+    String code, {
+    Future<String?> Function(String prompt)? onInput,
+  }) async {
     if (status == PythonRuntimeStatus.running) return;
     if (!runtime.isReady) await initialize();
     if (!runtime.isReady) return;
     status = PythonRuntimeStatus.running;
+    final executionMessageStart = messages.length;
     notifyListeners();
     try {
       final result = await runtime.execute(
         code,
         onStdout: (text) => _add(ConsoleMessageType.stdout, text),
         onStderr: (text) => _add(ConsoleMessageType.stderr, text),
+        onOutputReset: () {
+          if (messages.length > executionMessageStart) {
+            messages.removeRange(executionMessageStart, messages.length);
+            notifyListeners();
+          }
+        },
+        onInputRequested: (prompt) {
+          if (onInput != null) {
+            unawaited(_requestInput(prompt, onInput));
+          }
+        },
       );
       status = result.exitCode == 130
           ? PythonRuntimeStatus.stopped
@@ -225,6 +241,26 @@ class RuntimeController extends ChangeNotifier {
       _add(ConsoleMessageType.stderr, '$error\n');
     }
     notifyListeners();
+  }
+
+  Future<void> _requestInput(
+    String prompt,
+    Future<String?> Function(String prompt) provider,
+  ) async {
+    if (_requestingInput || status != PythonRuntimeStatus.running) return;
+    _requestingInput = true;
+    try {
+      final input = await provider(prompt);
+      if (status != PythonRuntimeStatus.running) return;
+      _requestingInput = false;
+      if (input == null) {
+        await stop();
+      } else {
+        await runtime.provideInput(input);
+      }
+    } finally {
+      _requestingInput = false;
+    }
   }
 
   Future<void> stop() => runtime.stop();

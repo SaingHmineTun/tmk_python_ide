@@ -9,6 +9,7 @@ import 'package:re_highlight/styles/atom-one-light.dart';
 import '../../models/console_message.dart';
 import '../../models/execution_state.dart';
 import '../../providers/app_providers.dart';
+import 'ios_web_editor_workarounds.dart';
 import '../programs/program_name_dialog.dart';
 import 'python_editing_controller.dart';
 
@@ -138,6 +139,9 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
               child: CodeEditor(
                 controller: controller,
                 focusNode: _editorFocusNode,
+                shortcutOverrideActions: buildIosWebEditorShortcutOverrides(
+                  controller,
+                ),
                 onChanged: (value) => session.updateCode(controller.text),
                 wordWrap: settings.wordWrap,
                 autocompleteSymbols: settings.autoClosingBrackets,

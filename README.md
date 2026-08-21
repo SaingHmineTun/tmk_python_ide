@@ -13,6 +13,8 @@ Flutter editor → PythonRuntime → Web Worker → bundled Pyodide
 
 - Python editor with syntax highlighting, line numbers, undo/redo, selection, horizontal/vertical scrolling, auto-closing symbols, and Python colon auto-indent
 - phone coding toolbar with Tab, outdent, symbols, undo, and redo
+- iPhone/iPad web editor workaround plus a dedicated Space key
+- name-first file creation and Python syntax checking before execution
 - real on-device Python execution; no `Process.run`, server, CDN, or installed system Python
 - streamed stdout/stderr, real Python tracebacks, expandable/draggable output console, clear, and copy
 - hard Stop: terminates the Web Worker and recreates a clean runtime, including for `while True`
@@ -90,6 +92,16 @@ flutter build apk --debug
 flutter build ios --debug --no-codesign
 flutter build web --release
 ```
+
+### Vercel deployment
+
+Build the Flutter web target before deployment and configure the Vercel build
+step to run `flutter build web --release`. The checked-in `vercel.json` serves
+`build/web` and keeps Flutter's entry files revalidated so a new deployment
+cannot mix an old bootstrap or service worker with new assets.
+
+The iOS bundle identifier is independent of the web deployment. The Runner and
+RunnerTests identifiers are aligned under `it.saimao.pythonide`.
 
 Run the end-to-end Python proof on a connected target:
 

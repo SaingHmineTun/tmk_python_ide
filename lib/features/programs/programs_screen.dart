@@ -80,7 +80,15 @@ class _ProgramsScreenState extends ConsumerState<ProgramsScreen> {
   }
 
   Future<void> _new() async {
-    await ref.read(editorSessionProvider).newProgram();
+    final name = await showProgramNameDialog(
+      context,
+      title: 'Create Python file',
+      actionLabel: 'Create',
+    );
+    if (name == null) return;
+    final session = ref.read(editorSessionProvider);
+    await session.newProgram(name: name);
+    await session.saveAsProgram();
     widget.onOpen();
   }
 

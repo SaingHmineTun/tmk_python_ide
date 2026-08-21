@@ -116,14 +116,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
             FilledButton.icon(
               onPressed: runtime.status == PythonRuntimeStatus.starting
                   ? null
-                  : () {
-                      session.updateCode(controller.text);
-                      setState(() => _consoleCollapsed = false);
-                      runtime.run(
-                        controller.text,
-                        onInput: _requestPythonInput,
-                      );
-                    },
+                  : () => _runProgram(session, runtime, controller),
               icon: const Icon(Icons.play_arrow, size: 18),
               label: const Text('Run'),
             ),
@@ -134,7 +127,15 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
         top: false,
         child: Column(
           children: [
-            _StatusStrip(controller: controller, status: runtime.status),
+            _StatusStrip(
+              controller: controller,
+              status: runtime.status,
+              onCheckSyntax:
+                  runtime.status == PythonRuntimeStatus.running ||
+                      runtime.status == PythonRuntimeStatus.starting
+                  ? null
+                  : () => _checkSyntax(session, runtime, controller),
+            ),
             Expanded(
               child: CodeEditor(
                 controller: controller,
@@ -224,6 +225,31 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     }
   }
 
+  Future<void> _runProgram(
+    EditorSession session,
+    RuntimeController runtime,
+    CodeLineEditingController controller,
+  ) async {
+    session.updateCode(controller.text);
+    setState(() => _consoleCollapsed = false);
+    final valid = await runtime.checkSyntax(
+      controller.text,
+      quietSuccess: true,
+    );
+    if (!valid || !mounted) return;
+    await runtime.run(controller.text, onInput: _requestPythonInput);
+  }
+
+  Future<void> _checkSyntax(
+    EditorSession session,
+    RuntimeController runtime,
+    CodeLineEditingController controller,
+  ) async {
+    session.updateCode(controller.text);
+    setState(() => _consoleCollapsed = false);
+    await runtime.checkSyntax(controller.text);
+  }
+
   Future<String?> _requestPythonInput(String prompt) async {
     if (!mounted) return null;
     return showDialog<String>(
@@ -261,13 +287,21 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
       );
       if (create != true) return;
     }
+    if (!mounted) return;
+    final name = await showProgramNameDialog(
+      context,
+      title: 'Create Python file',
+      actionLabel: 'Create',
+    );
+    if (name == null) return;
     try {
-      await session.newProgram();
+      await session.newProgram(name: name);
+      await session.saveAsProgram();
       ref.read(runtimeControllerProvider).clear();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('New Python file created')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$name.py created')));
       }
     } catch (error) {
       if (mounted) _showError('Could not create a new file: $error');
@@ -314,9 +348,14 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
 }
 
 class _StatusStrip extends StatefulWidget {
-  const _StatusStrip({required this.controller, required this.status});
+  const _StatusStrip({
+    required this.controller,
+    required this.status,
+    required this.onCheckSyntax,
+  });
   final CodeLineEditingController controller;
   final PythonRuntimeStatus status;
+  final VoidCallback? onCheckSyntax;
 
   @override
   State<_StatusStrip> createState() => _StatusStripState();
@@ -367,6 +406,8 @@ class _StatusStripState extends State<_StatusStrip> {
         Icon(
           widget.status == PythonRuntimeStatus.ready
               ? Icons.check_circle_outline
+              : widget.status == PythonRuntimeStatus.idle
+              ? Icons.bolt_outlined
               : Icons.circle,
           size: 12,
           color: widget.status == PythonRuntimeStatus.error
@@ -377,6 +418,15 @@ class _StatusStripState extends State<_StatusStrip> {
         Text(
           widget.status.label,
           style: Theme.of(context).textTheme.labelSmall,
+        ),
+        const SizedBox(width: 4),
+        IconButton(
+          tooltip: 'Check Python syntax',
+          onPressed: widget.onCheckSyntax,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+          icon: const Icon(Icons.fact_check_outlined, size: 16),
         ),
       ],
     ),
@@ -504,6 +554,12 @@ class CodingToolbar extends StatelessWidget {
               '→',
               () => controller.moveCursor(AxisDirection.right),
             ),
+            _button(
+              context,
+              'Space',
+              () => controller.replaceSelection(' '),
+              wide: true,
+            ),
             _button(context, 'Tab', controller.applyIndent, wide: true),
             _button(context, '⇤', controller.applyOutdent),
             _button(context, '↶', controller.undo),
@@ -529,6 +585,13 @@ class CodingToolbar extends StatelessWidget {
         style: TextButton.styleFrom(
           padding: EdgeInsets.zero,
           foregroundColor: Theme.of(context).colorScheme.onSurface,
+          backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(9),
+            side: BorderSide(
+              color: Theme.of(context).colorScheme.outlineVariant,
+            ),
+          ),
         ),
         onPressed: () => _perform(action),
         child: Text(
@@ -644,32 +707,41 @@ class _ConsolePanel extends StatelessWidget {
           ),
           if (!collapsed)
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
-                itemCount: messages.length,
-                itemBuilder: (context, index) {
-                  final message = messages[index];
-                  final color = switch (message.type) {
-                    ConsoleMessageType.stderr => Colors.redAccent,
-                    ConsoleMessageType.system => Theme.of(
-                      context,
-                    ).colorScheme.primary,
-                    ConsoleMessageType.input => Colors.amber,
-                    ConsoleMessageType.stdout => Theme.of(
-                      context,
-                    ).colorScheme.onSurface,
-                  };
-                  return SelectableText(
-                    message.text,
-                    style: TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 13,
-                      color: color,
-                      height: 1.35,
+              child: messages.isEmpty
+                  ? Center(
+                      child: Text(
+                        'Run your program to see output',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        final message = messages[index];
+                        final color = switch (message.type) {
+                          ConsoleMessageType.stderr => Colors.redAccent,
+                          ConsoleMessageType.system => Theme.of(
+                            context,
+                          ).colorScheme.primary,
+                          ConsoleMessageType.input => Colors.amber,
+                          ConsoleMessageType.stdout => Theme.of(
+                            context,
+                          ).colorScheme.onSurface,
+                        };
+                        return SelectableText(
+                          message.text,
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 13,
+                            color: color,
+                            height: 1.35,
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
             ),
         ],
       ),

@@ -23,7 +23,6 @@ class _IdeShellState extends ConsumerState<IdeShell>
     WidgetsBinding.instance.addObserver(this);
     Future.microtask(() {
       ref.read(editorSessionProvider).restore();
-      ref.read(runtimeControllerProvider).initialize();
     });
   }
 

@@ -33,8 +33,37 @@
 
   <title>Python IDE</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    html, body { height: 100%; margin: 0; background: #071a3a; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    #app-loading {
+      height: 100%; display: grid; place-items: center; color: white;
+      background: radial-gradient(circle at 50% 35%, #1557c0 0, #071a3a 58%);
+    }
+    .loading-card { text-align: center; padding: 28px; }
+    .loading-card img { width: 82px; height: 82px; object-fit: contain; }
+    .loading-card h1 { margin: 14px 0 5px; font-size: 22px; }
+    .loading-card p { margin: 0; color: #d9e5ff; font-size: 14px; }
+    .loading-bar {
+      width: 150px; height: 4px; margin: 22px auto 0; overflow: hidden;
+      border-radius: 99px; background: rgba(255,255,255,.18);
+    }
+    .loading-bar::after {
+      content: ""; display: block; width: 45%; height: 100%; border-radius: inherit;
+      background: #f2b705; animation: load 1.1s ease-in-out infinite alternate;
+    }
+    @keyframes load { from { transform: translateX(-20%); } to { transform: translateX(145%); } }
+  </style>
 </head>
 <body>
+  <div id="app-loading" role="status" aria-label="Loading Python IDE">
+    <div class="loading-card">
+      <img src="icons/Icon-192.png" alt="">
+      <h1>Python IDE</h1>
+      <p>Preparing your editor…</p>
+      <div class="loading-bar"></div>
+    </div>
+  </div>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader

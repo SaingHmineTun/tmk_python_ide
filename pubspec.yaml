@@ -73,7 +73,11 @@ flutter:
 
   assets:
     - assets/runtime/
-    - assets/pyodide/
+    - assets/pyodide/pyodide.mjs
+    - assets/pyodide/pyodide.asm.mjs
+    - assets/pyodide/pyodide.asm.wasm
+    - assets/pyodide/pyodide-lock.json
+    - assets/pyodide/python_stdlib.zip
     - assets/images/
 
 flutter_launcher_icons:

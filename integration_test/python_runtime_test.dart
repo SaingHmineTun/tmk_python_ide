@@ -15,10 +15,10 @@ void main() {
 
     await _pumpUntil(
       tester,
-      find.text('Python Ready'),
-      const Duration(seconds: 60),
+      find.text('Python loads on first run'),
+      const Duration(seconds: 10),
     );
-    if (find.text('Python Ready').evaluate().isEmpty) {
+    if (find.text('Python loads on first run').evaluate().isEmpty) {
       final labels = tester
           .widgetList<Text>(find.byType(Text))
           .map((widget) => widget.data)
@@ -32,7 +32,7 @@ void main() {
           .toList();
       debugPrint('CONSOLE TEXT: $console');
     }
-    expect(find.text('Python Ready'), findsOneWidget);
+    expect(find.text('Python loads on first run'), findsOneWidget);
 
     final codeEditor = tester.widget<CodeEditor>(find.byType(CodeEditor));
     final editor = codeEditor.controller!;
@@ -58,7 +58,7 @@ void main() {
     await _pumpUntil(
       tester,
       find.textContaining('Hello, World!'),
-      const Duration(seconds: 30),
+      const Duration(seconds: 60),
     );
     expect(find.textContaining('Hello, World!'), findsWidgets);
     expect(find.textContaining('Finished successfully'), findsOneWidget);
@@ -131,6 +131,21 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.delete_sweep_outlined));
     await tester.pump();
+    editor.text = 'if True print("broken")';
+    await tester.tap(find.text('Run'));
+    await _pumpUntil(
+      tester,
+      find.textContaining('SyntaxError'),
+      const Duration(seconds: 20),
+    );
+    expect(find.textContaining('SyntaxError'), findsWidgets);
+    expect(
+      find.textContaining('Fix the syntax error before running.'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byIcon(Icons.delete_sweep_outlined));
+    await tester.pump();
     editor.text = 'print(undefined_variable)';
     await tester.tap(find.text('Run'));
     await _pumpUntil(
@@ -156,6 +171,18 @@ void main() {
     await _pumpUntil(tester, find.text('Stopped'), const Duration(seconds: 5));
     expect(find.text('Stopped'), findsOneWidget);
     expect(find.textContaining('Stopped'), findsWidgets);
+
+    await tester.tap(find.byKey(const ValueKey('new-python-file-button')));
+    await tester.pumpAndSettle();
+    if (find.text('Create a new file?').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Create'));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('Create Python file'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'lesson_one.py');
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+    expect(find.text('lesson_one.py'), findsOneWidget);
   });
 }
 

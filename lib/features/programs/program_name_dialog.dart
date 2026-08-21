@@ -69,6 +69,8 @@ class _ProgramNameDialogState extends State<_ProgramNameDialog> {
       autocorrect: false,
       decoration: InputDecoration(
         labelText: 'Program name',
+        hintText: 'my_first_program',
+        helperText: 'Use a clear name; .py is added automatically.',
         suffixText: '.py',
         errorText: _error,
       ),

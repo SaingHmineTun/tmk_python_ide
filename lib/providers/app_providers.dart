@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -179,7 +180,7 @@ class RuntimeController extends ChangeNotifier {
   RuntimeController(this.runtime);
 
   final PythonRuntime runtime;
-  PythonRuntimeStatus status = PythonRuntimeStatus.starting;
+  PythonRuntimeStatus status = PythonRuntimeStatus.idle;
   final List<ConsoleMessage> messages = [];
   String? runtimeError;
   bool _requestingInput = false;
@@ -241,6 +242,41 @@ class RuntimeController extends ChangeNotifier {
       _add(ConsoleMessageType.stderr, '$error\n');
     }
     notifyListeners();
+  }
+
+  Future<bool> checkSyntax(String code, {bool quietSuccess = false}) async {
+    if (status == PythonRuntimeStatus.running ||
+        status == PythonRuntimeStatus.starting) {
+      return false;
+    }
+    if (!runtime.isReady) await initialize();
+    if (!runtime.isReady) return false;
+
+    status = PythonRuntimeStatus.running;
+    notifyListeners();
+    try {
+      final result = await runtime.execute(
+        'compile(${jsonEncode(code)}, "<editor>", "exec")',
+        onStdout: (text) => _add(ConsoleMessageType.stdout, text),
+        onStderr: (text) => _add(ConsoleMessageType.stderr, text),
+        onOutputReset: () {},
+        onInputRequested: (_) {},
+      );
+      status = PythonRuntimeStatus.ready;
+      if (result.succeeded) {
+        if (!quietSuccess) {
+          _add(ConsoleMessageType.system, 'Syntax check passed\n');
+        }
+        notifyListeners();
+        return true;
+      }
+      _add(ConsoleMessageType.system, 'Fix the syntax error before running.\n');
+    } catch (error) {
+      status = PythonRuntimeStatus.error;
+      _add(ConsoleMessageType.stderr, 'Syntax check failed: $error\n');
+    }
+    notifyListeners();
+    return false;
   }
 
   Future<void> _requestInput(

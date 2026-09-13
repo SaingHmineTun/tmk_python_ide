@@ -1,5 +1,18 @@
 import 'package:flutter/material.dart';
 
+/// Normalizes a folder/package path such as "utils/helpers/" to "utils/helpers"
+/// without leading or trailing slashes. Empty means the project root.
+String normalizeFolderPath(String value) {
+  var path = value.replaceAll('\\', '/').trim();
+  while (path.startsWith('/')) {
+    path = path.substring(1);
+  }
+  while (path.endsWith('/')) {
+    path = path.substring(0, path.length - 1);
+  }
+  return path;
+}
+
 Future<({String name, String folder})?> showFileCreateDialog(
   BuildContext context, {
   required String title,
@@ -42,21 +55,8 @@ class _FileCreateDialogState extends State<_FileCreateDialog> {
       setState(() => _error = 'Enter a file name.');
       return;
     }
-    final folder = _normalizeFolder(_folderController.text.trim());
+    final folder = normalizeFolderPath(_folderController.text);
     Navigator.pop(context, (name: name, folder: folder));
-  }
-
-  /// Normalizes a folder/package path such as "utils/helpers" to "utils/helpers"
-  /// without leading or trailing slashes. Empty means the project root.
-  String _normalizeFolder(String value) {
-    var path = value.replaceAll('\\', '/');
-    while (path.startsWith('/')) {
-      path = path.substring(1);
-    }
-    while (path.endsWith('/')) {
-      path = path.substring(0, path.length - 1);
-    }
-    return path;
   }
 
   @override

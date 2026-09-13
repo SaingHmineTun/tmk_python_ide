@@ -166,7 +166,7 @@ class _ProjectFilesScreenState extends ConsumerState<ProjectFilesScreen> {
       await ref.read(programRepositoryProvider).save(
         PythonProgram(
           projectId: widget.project.id!,
-          folderPath: name,
+          folderPath: normalizeFolderPath(name),
           name: '__init__',
           code: '# $name package\n',
           createdAt: now,

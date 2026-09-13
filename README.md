@@ -19,6 +19,8 @@ Flutter editor → PythonRuntime → Web Worker → bundled Pyodide
 - streamed stdout/stderr, real Python tracebacks, expandable/draggable output console, clear, and copy
 - hard Stop: terminates the Web Worker and recreates a clean runtime, including for `while True`
 - persistent programs with create, save, open, rename, duplicate, search, and confirmed delete
+- project-based file management like PyCharm: create projects, open a project to see its Python modules, add new files, create Python packages (folders with `__init__.py`), and import `.py` into a project
+- the editor's new-file button adds the file to the current project; every program now lives inside a project
 - debounced autosave for saved programs and recovery drafts for unsaved programs
 - UTF-8 `.py` import, export, code sharing, and file sharing
 - system/light/dark themes and editor preferences
@@ -52,19 +54,34 @@ See [docs/python_runtime_decision.md](docs/python_runtime_decision.md) for the e
 
 ## Storage and privacy
 
-Programs are stored in SQLite on Android and iOS. The web build stores the same program model in browser-local persistent storage, keeping files on that browser profile.
+Programs are organized into projects. Projects are stored in SQLite on Android and iOS; the web build stores the same models in browser-local persistent storage, keeping files on that browser profile.
+
+The mobile `projects` table is:
+
+```sql
+CREATE TABLE projects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+```
 
 The mobile `programs` table is:
 
 ```sql
 CREATE TABLE programs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL,
+  folder_path TEXT NOT NULL DEFAULT '',
   name TEXT NOT NULL,
   code TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 ```
+
+`folder_path` groups files into packages/folders (empty means the project root). On upgrade from version 1, all previously standalone programs are moved into a default `My Programs` project so no source is lost.
 
 Source code stays on-device or in the current browser profile. It is not sent to analytics, a server, or an AI API. Code leaves the app only when the user explicitly imports, exports, or shares it. Opening/importing a program never executes it.
 
@@ -123,7 +140,7 @@ The integration test waits for Python readiness, runs `print("Hello, World!")`, 
 ## Verification performed
 
 - `flutter analyze`: clean
-- Dart/SQLite tests: CRUD, search, model behavior, and Unicode round-trip pass
+- Dart/SQLite tests: project and program CRUD, project scoping, folder grouping, search, model behavior, and Unicode round-trip pass
 - phone-sized web browser: bundled Python execution, output, browser-local save, reload persistence, and Files listing pass
 - release web, debug Android APK, and no-codesign iOS device builds compile successfully
 - iOS 26.5 iPhone simulator: runtime/output/error/stop integration test passes
@@ -141,7 +158,7 @@ lib/
 │   └── python/             runtime abstraction and Pyodide bridge
 ├── features/
 │   ├── editor/             editor, toolbar, console, Python editing behavior
-│   ├── programs/           saved program management
+│   ├── programs/           projects, project files, and name dialogs
 │   ├── settings/           editor and theme preferences
 │   └── shell/              responsive navigation/runtime host
 ├── models/

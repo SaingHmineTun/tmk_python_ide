@@ -11,18 +11,36 @@ import '../core/python/python_runtime.dart';
 import '../models/console_message.dart';
 import '../models/execution_state.dart';
 import '../models/python_program.dart';
+import '../models/python_project.dart';
 import '../repositories/program_repository.dart';
+import '../repositories/project_repository.dart';
 
 const defaultStarterCode = 'print("Hello, World!")\n';
 
 final programRepositoryProvider = Provider((ref) => ProgramRepository());
 final programFileServiceProvider = Provider((ref) => ProgramFileService());
+final projectRepositoryProvider = Provider((ref) => ProjectRepository());
 
-final programsProvider = FutureProvider.family<List<PythonProgram>, String>((
+final projectsProvider = FutureProvider.family<List<PythonProject>, String>((
   ref,
   search,
 ) {
-  return ref.watch(programRepositoryProvider).getAll(search: search);
+  return ref.watch(projectRepositoryProvider).getAll(search: search);
+});
+
+String programsKey(int projectId, String search) =>
+    '$projectId|${search.trim()}';
+
+final programsProvider = FutureProvider.family<List<PythonProgram>, String>((
+  ref,
+  key,
+) {
+  final separator = key.indexOf('|');
+  final projectId = int.parse(key.substring(0, separator));
+  final search = separator + 1 < key.length ? key.substring(separator + 1) : '';
+  return ref
+      .watch(programRepositoryProvider)
+      .getAll(projectId: projectId, search: search);
 });
 
 final editorSessionProvider = ChangeNotifierProvider<EditorSession>((ref) {
@@ -35,19 +53,31 @@ class EditorSession extends ChangeNotifier {
   static const _draftCodeKey = 'editor_draft_code';
   static const _draftNameKey = 'editor_draft_name';
   static const _lastProgramKey = 'last_program_id';
+  static const _lastProjectKey = 'last_project_id';
 
   final ProgramRepository _repository;
   final Ref _ref;
   PythonProgram? current;
+  PythonProject? currentProject;
   Timer? _autoSave;
   bool dirty = false;
   bool loading = true;
 
   Future<void> restore() async {
     final prefs = await SharedPreferences.getInstance();
+    final projectRepo = _ref.read(projectRepositoryProvider);
+    final lastProjectId = prefs.getInt(_lastProjectKey);
+    if (lastProjectId != null) {
+      currentProject = await projectRepo.getById(lastProjectId);
+    }
+    currentProject ??= await projectRepo.getDefault();
+    if (currentProject?.id != null) {
+      await prefs.setInt(_lastProjectKey, currentProject!.id!);
+    }
     final lastId = prefs.getInt(_lastProgramKey);
     if (lastId != null) current = await _repository.getById(lastId);
     current ??= PythonProgram(
+      projectId: currentProject?.id ?? 0,
       name: prefs.getString(_draftNameKey) ?? 'Untitled',
       code: prefs.getString(_draftCodeKey) ?? defaultStarterCode,
       createdAt: DateTime.now(),
@@ -66,12 +96,47 @@ class EditorSession extends ChangeNotifier {
     _autoSave = Timer(const Duration(milliseconds: 900), save);
   }
 
+  Future<PythonProject> newProject(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) throw ArgumentError('Project name cannot be empty.');
+    await flush();
+    final now = DateTime.now();
+    final project = await _ref.read(projectRepositoryProvider).save(
+      PythonProject(name: trimmed, createdAt: now, updatedAt: now),
+    );
+    currentProject = project;
+    final main = await _repository.save(
+      PythonProgram(
+        projectId: project.id!,
+        folderPath: '',
+        name: 'main',
+        code: defaultStarterCode,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    current = main;
+    dirty = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_lastProjectKey, project.id!);
+    await prefs.setInt(_lastProgramKey, main.id!);
+    await prefs.remove(_draftCodeKey);
+    await prefs.remove(_draftNameKey);
+    _ref.invalidate(projectsProvider);
+    notifyListeners();
+    return project;
+  }
+
   Future<void> newProgram({
     String code = defaultStarterCode,
     String name = 'Untitled',
+    int? projectId,
+    String folderPath = '',
   }) async {
     await flush();
     current = PythonProgram(
+      projectId: projectId ?? currentProject?.id ?? 0,
+      folderPath: folderPath,
       name: name,
       code: code,
       createdAt: DateTime.now(),
@@ -85,9 +150,36 @@ class EditorSession extends ChangeNotifier {
   Future<void> open(PythonProgram program) async {
     await flush();
     current = program;
+    if (program.projectId != 0) {
+      currentProject =
+          await _ref.read(projectRepositoryProvider).getById(program.projectId) ??
+          currentProject;
+    }
     dirty = false;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_lastProgramKey, program.id!);
+    if (currentProject?.id != null) {
+      await prefs.setInt(_lastProjectKey, currentProject!.id!);
+    }
+    notifyListeners();
+  }
+
+  Future<void> setProjectContext(PythonProject project) async {
+    currentProject = project;
+    if (project.id != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_lastProjectKey, project.id!);
+    }
+    notifyListeners();
+  }
+
+  Future<void> resetProjectContext() async {
+    final project = await _ref.read(projectRepositoryProvider).getDefault();
+    currentProject = project;
+    if (project.id != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_lastProjectKey, project.id!);
+    }
     notifyListeners();
   }
 

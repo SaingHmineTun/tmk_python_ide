@@ -9,15 +9,28 @@ class ProgramRepository {
 
   final Future<Database> Function() _database;
 
-  Future<List<PythonProgram>> getAll({String search = ''}) async {
+  Future<List<PythonProgram>> getAll({
+    int? projectId,
+    String search = '',
+  }) async {
     final db = await _database();
+    final where = <String>[];
+    final args = <Object?>[];
+    if (projectId != null) {
+      where.add('project_id = ?');
+      args.add(projectId);
+    }
+    if (search.trim().isNotEmpty) {
+      where.add('name LIKE ? COLLATE NOCASE');
+      args.add('%${search.trim()}%');
+    }
     final rows = await db.query(
       'programs',
-      where: search.trim().isEmpty ? null : 'name LIKE ? COLLATE NOCASE',
-      whereArgs: search.trim().isEmpty ? null : ['%${search.trim()}%'],
-      orderBy: 'updated_at DESC',
+      where: where.isEmpty ? null : where.join(' AND '),
+      whereArgs: where.isEmpty ? null : args,
+      orderBy: 'name COLLATE NOCASE ASC',
     );
-    return rows.map(PythonProgram.fromMap).toList(growable: false);
+    return _organize(rows.map(PythonProgram.fromMap).toList());
   }
 
   Future<PythonProgram?> getById(int id) async {
@@ -62,11 +75,24 @@ class ProgramRepository {
     final now = DateTime.now();
     return save(
       PythonProgram(
+        projectId: source.projectId,
+        folderPath: source.folderPath,
         name: '${source.name} Copy',
         code: source.code,
         createdAt: now,
         updatedAt: now,
       ),
     );
+  }
+
+  /// Sorts root files first, then files grouped by folder, each group
+  /// alphabetically.
+  List<PythonProgram> _organize(List<PythonProgram> programs) {
+    programs.sort((a, b) {
+      final compared = a.folderPath.compareTo(b.folderPath);
+      if (compared != 0) return compared;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return programs;
   }
 }

@@ -1,37 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../models/python_program.dart';
+import '../../models/python_project.dart';
 import '../../providers/app_providers.dart';
-import 'program_name_dialog.dart';
+import 'project_files_screen.dart';
+import 'project_name_dialog.dart';
 
-class ProgramsScreen extends ConsumerStatefulWidget {
-  const ProgramsScreen({super.key, required this.onOpen});
+class ProjectsScreen extends ConsumerStatefulWidget {
+  const ProjectsScreen({super.key, required this.onOpen});
   final VoidCallback onOpen;
 
   @override
-  ConsumerState<ProgramsScreen> createState() => _ProgramsScreenState();
+  ConsumerState<ProjectsScreen> createState() => _ProjectsScreenState();
 }
 
-class _ProgramsScreenState extends ConsumerState<ProgramsScreen> {
+class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   String _search = '';
 
   @override
   Widget build(BuildContext context) {
-    final programs = ref.watch(programsProvider(_search));
+    final projects = ref.watch(projectsProvider(_search));
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Programs'),
+        title: const Text('My Projects'),
         actions: [
           IconButton(
-            tooltip: 'Import .py',
-            onPressed: _import,
-            icon: const Icon(Icons.file_open_outlined),
-          ),
-          IconButton(
-            tooltip: 'New program',
+            tooltip: 'New project',
             onPressed: _new,
-            icon: const Icon(Icons.add),
+            icon: const Icon(Icons.create_new_folder_outlined),
           ),
           const SizedBox(width: 6),
         ],
@@ -41,28 +37,28 @@ class _ProgramsScreenState extends ConsumerState<ProgramsScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
             child: SearchBar(
-              hintText: 'Search programs…',
+              hintText: 'Search projects…',
               leading: const Icon(Icons.search),
               onChanged: (value) => setState(() => _search = value),
             ),
           ),
           Expanded(
-            child: programs.when(
+            child: projects.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, stack) =>
-                  Center(child: Text('Could not load programs: $error')),
+                  Center(child: Text('Could not load projects: $error')),
               data: (items) => items.isEmpty
-                  ? const _EmptyPrograms()
+                  ? const _EmptyProjects()
                   : RefreshIndicator(
                       onRefresh: () =>
-                          ref.refresh(programsProvider(_search).future),
+                          ref.refresh(projectsProvider(_search).future),
                       child: ListView.separated(
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
                         itemCount: items.length,
                         separatorBuilder: (_, _) => const Divider(height: 1),
-                        itemBuilder: (context, index) => _ProgramTile(
-                          program: items[index],
-                          onOpen: () => _open(items[index]),
+                        itemBuilder: (context, index) => _ProjectTile(
+                          project: items[index],
+                          onOpen: () => _openProject(items[index]),
                           onAction: (action) => _action(action, items[index]),
                         ),
                       ),
@@ -74,67 +70,67 @@ class _ProgramsScreenState extends ConsumerState<ProgramsScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _new,
         icon: const Icon(Icons.add),
-        label: const Text('New'),
+        label: const Text('New project'),
       ),
     );
   }
 
   Future<void> _new() async {
-    final name = await showProgramNameDialog(
+    final name = await showProjectNameDialog(
       context,
-      title: 'Create Python file',
+      title: 'Create project',
       actionLabel: 'Create',
     );
-    if (name == null) return;
-    final session = ref.read(editorSessionProvider);
-    await session.newProgram(name: name);
-    await session.saveAsProgram();
-    widget.onOpen();
+    if (name == null || !mounted) return;
+    final project = await ref.read(editorSessionProvider).newProject(name);
+    if (!mounted) return;
+    _pushProject(project);
   }
 
-  Future<void> _open(PythonProgram program) async {
-    await ref.read(editorSessionProvider).open(program);
-    widget.onOpen();
-  }
-
-  Future<void> _import() async {
-    final imported = await ref.read(programFileServiceProvider).importPython();
-    if (imported == null) return;
+  Future<void> _openProject(PythonProject project) async {
     await ref
         .read(editorSessionProvider)
-        .newProgram(name: imported.name, code: imported.code);
-    await ref.read(editorSessionProvider).saveAsProgram();
-    widget.onOpen();
+        .setProjectContext(project);
+    if (!mounted) return;
+    _pushProject(project);
   }
 
-  Future<void> _action(String action, PythonProgram program) async {
-    final repository = ref.read(programRepositoryProvider);
+  void _pushProject(PythonProject project) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => ProjectFilesScreen(
+          project: project,
+          onOpen: widget.onOpen,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _action(String action, PythonProject project) async {
+    final repository = ref.read(projectRepositoryProvider);
     try {
       switch (action) {
         case 'rename':
-          final name = await _askName(program.name);
+          final name = await _askName(project.name);
           if (name != null) {
-            await ref.read(editorSessionProvider).renameProgram(program, name);
+            await repository.save(project.copyWith(name: name));
           }
-        case 'duplicate':
-          await repository.duplicate(program);
         case 'delete':
-          if (await _confirmDelete(program)) {
-            await repository.delete(program.id!);
+          if (await _confirmDelete(project)) {
+            await repository.delete(project.id!);
+            final session = ref.read(editorSessionProvider);
+            if (session.currentProject?.id == project.id) {
+              await session.resetProjectContext();
+            }
           }
-        case 'shareText':
-          await ref.read(programFileServiceProvider).shareText(program);
-        case 'shareFile':
-          await ref.read(programFileServiceProvider).shareFile(program);
-        case 'export':
-          await ref.read(programFileServiceProvider).exportFile(program);
       }
+      ref.invalidate(projectsProvider);
       ref.invalidate(programsProvider);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not $action program: $error'),
+          content: Text('Could not $action project: $error'),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
@@ -142,20 +138,22 @@ class _ProgramsScreenState extends ConsumerState<ProgramsScreen> {
   }
 
   Future<String?> _askName(String current) async {
-    return showProgramNameDialog(
+    return showProjectNameDialog(
       context,
-      title: 'Rename program',
+      title: 'Rename project',
       actionLabel: 'Rename',
       initialName: current,
     );
   }
 
-  Future<bool> _confirmDelete(PythonProgram program) async =>
+  Future<bool> _confirmDelete(PythonProject project) async =>
       await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text('Delete "${program.name}"?'),
-          content: const Text('This program will be permanently deleted.'),
+          title: Text('Delete "${project.name}"?'),
+          content: const Text(
+            'This project and all of its Python files will be permanently deleted.',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -174,13 +172,13 @@ class _ProgramsScreenState extends ConsumerState<ProgramsScreen> {
       false;
 }
 
-class _ProgramTile extends StatelessWidget {
-  const _ProgramTile({
-    required this.program,
+class _ProjectTile extends StatelessWidget {
+  const _ProjectTile({
+    required this.project,
     required this.onOpen,
     required this.onAction,
   });
-  final PythonProgram program;
+  final PythonProject project;
   final VoidCallback onOpen;
   final ValueChanged<String> onAction;
 
@@ -195,13 +193,13 @@ class _ProgramTile extends StatelessWidget {
         color: Theme.of(context).colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: const Text(
-        'py',
-        style: TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold),
+      child: Icon(
+        Icons.folder_outlined,
+        color: Theme.of(context).colorScheme.onPrimaryContainer,
       ),
     ),
-    title: Text(program.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-    subtitle: Text(_updatedLabel(program.updatedAt)),
+    title: Text(project.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+    subtitle: Text(_updatedLabel(project.updatedAt)),
     trailing: PopupMenuButton<String>(
       onSelected: onAction,
       itemBuilder: (context) => const [
@@ -210,34 +208,6 @@ class _ProgramTile extends StatelessWidget {
           child: ListTile(
             leading: Icon(Icons.edit_outlined),
             title: Text('Rename'),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'duplicate',
-          child: ListTile(
-            leading: Icon(Icons.copy_all_outlined),
-            title: Text('Duplicate'),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'shareText',
-          child: ListTile(
-            leading: Icon(Icons.text_snippet_outlined),
-            title: Text('Share code'),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'shareFile',
-          child: ListTile(
-            leading: Icon(Icons.share_outlined),
-            title: Text('Share .py file'),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'export',
-          child: ListTile(
-            leading: Icon(Icons.download_outlined),
-            title: Text('Export .py'),
           ),
         ),
         PopupMenuDivider(),
@@ -263,8 +233,8 @@ class _ProgramTile extends StatelessWidget {
   }
 }
 
-class _EmptyPrograms extends StatelessWidget {
-  const _EmptyPrograms();
+class _EmptyProjects extends StatelessWidget {
+  const _EmptyProjects();
   @override
   Widget build(BuildContext context) => const Center(
     child: Padding(
@@ -272,15 +242,15 @@ class _EmptyPrograms extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.code, size: 56),
+          Icon(Icons.folder_outlined, size: 56),
           SizedBox(height: 16),
           Text(
-            'No saved programs yet',
+            'No projects yet',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           ),
           SizedBox(height: 6),
           Text(
-            'Create a program and start writing Python.',
+            'Create a project to organize your Python files.',
             textAlign: TextAlign.center,
           ),
         ],

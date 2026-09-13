@@ -1,56 +1,38 @@
-class PythonProgram {
-  const PythonProgram({
+class PythonProject {
+  const PythonProject({
     this.id,
-    required this.projectId,
-    this.folderPath = '',
     required this.name,
-    required this.code,
     required this.createdAt,
     required this.updatedAt,
   });
 
   final int? id;
-  final int projectId;
-  final String folderPath;
   final String name;
-  final String code;
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  PythonProgram copyWith({
+  PythonProject copyWith({
     int? id,
-    int? projectId,
-    String? folderPath,
     String? name,
-    String? code,
     DateTime? createdAt,
     DateTime? updatedAt,
-  }) => PythonProgram(
+  }) => PythonProject(
     id: id ?? this.id,
-    projectId: projectId ?? this.projectId,
-    folderPath: folderPath ?? this.folderPath,
     name: name ?? this.name,
-    code: code ?? this.code,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
 
   Map<String, Object?> toMap() => {
     if (id != null) 'id': id,
-    'project_id': projectId,
-    'folder_path': folderPath,
     'name': name,
-    'code': code,
     'created_at': createdAt.toIso8601String(),
     'updated_at': updatedAt.toIso8601String(),
   };
 
-  factory PythonProgram.fromMap(Map<String, Object?> map) => PythonProgram(
+  factory PythonProject.fromMap(Map<String, Object?> map) => PythonProject(
     id: map['id'] as int?,
-    projectId: map['project_id'] as int? ?? 0,
-    folderPath: map['folder_path'] as String? ?? '',
     name: map['name'] as String,
-    code: map['code'] as String,
     createdAt: DateTime.parse(map['created_at'] as String),
     updatedAt: DateTime.parse(map['updated_at'] as String),
   );

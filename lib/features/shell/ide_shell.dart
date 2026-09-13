@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/app_providers.dart';
 import '../editor/editor_screen.dart';
-import '../programs/programs_screen.dart';
+import '../programs/projects_screen.dart';
 import '../settings/settings_screen.dart';
 
 class IdeShell extends ConsumerStatefulWidget {
@@ -47,7 +47,12 @@ class _IdeShellState extends ConsumerState<IdeShell>
     final wide = MediaQuery.sizeOf(context).width >= 800;
     final pages = [
       const EditorScreen(),
-      ProgramsScreen(onOpen: () => setState(() => _index = 0)),
+      ProjectsScreen(
+        onOpen: () {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          setState(() => _index = 0);
+        },
+      ),
       const SettingsScreen(),
     ];
     return Stack(
